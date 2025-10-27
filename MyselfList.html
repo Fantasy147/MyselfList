@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>MyselfList — Correção</title>
+    <link rel="stylesheet" href="Estilo.css" />
+    <link rel="stylesheet" href="nav_links.css" />
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+    <div class="topbar">
+        <div class="tp_esquerda">
+            <a href="#" class="logo-link"><img src="logo.webp" alt="Logo"/></a>
+        </div>
+        <div class="tp_direita">
+            <div class="modo-toggle">
+                <span id="modoLabel" class="modo-label">Modo Claro</span>
+                <label class="switch">
+                    <input type="checkbox" id="modoToggle" title="label" />
+                    <span class="slider round"></span>
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <main>
+        <h2>Lista: AsianDramas</h2>
+        <div style="margin-bottom:12px;">
+            <button onclick="abrirModalAdicionar()">+ Novo Registo</button>
+            <button onclick="gerarPDF()">Exportar PDF</button>
+            <button onclick="gerarExcel()">Exportar Excel</button>
+        </div>
+
+        <div class="tabela_conteudo">
+            <table class="tabelas" id="mainTable">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>id_drama</th>
+                        <th>title</th>
+                        <th>title_2</th>
+                        <th>synopsis</th>
+                        <th>release_date</th>
+                        <th>country</th>
+                        <th>episodes</th>
+                        <th>duration_minutes</th>
+                        <th>seasons</th>
+                        <th>cover</th>
+                    </tr>
+                </thead>
+                <tbody id="tbody"></tbody>
+            </table>
+        </div>
+
+        <!-- Modal Adicionar -->
+        <div class="modal" id="modalAdicionar" style="display:none;">
+            <div class="modal-content">
+                <span class="modal-close" onclick="fecharModalAdicionar()">&times;</span>
+                <h3>+ Novo Registo</h3>
+                <div id="errorMsgAdicionar" class="error-message"></div>
+
+                <input type="text" id="add_id_drama" placeholder="id_drama" />
+                <input type="text" id="add_title" placeholder="title *" />
+                <input type="text" id="add_title_2" placeholder="title_2" />
+                <textarea id="add_synopsis" placeholder="synopsis"></textarea>
+                <input type="number" id="add_release_date" placeholder="release_date (YYYY)" />
+                <input type="text" id="add_country" placeholder="country" />
+                <input type="number" id="add_episodes" placeholder="episodes" />
+                <input type="number" id="add_duration_minutes" placeholder="duration_minutes" />
+                <input type="number" id="add_seasons" placeholder="seasons" />
+                <input type="text" id="add_cover" placeholder="cover (url)" />
+
+                <div class="modal-footer">
+                    <button onclick="fecharModalAdicionar()">Cancelar</button>
+                    <button onclick="guardarNovo()">Guardar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Editar -->
+        <div class="modal" id="modalEditar" style="display:none;">
+            <div class="modal-content">
+                <span class="modal-close" onclick="fecharModalEditar()">&times;</span>
+                <h3>Editar Registo</h3>
+                <div id="errorMsgEditar" class="error-message"></div>
+
+                <input type="hidden" id="edit_key" />
+                <input type="text" id="edit_id_drama" placeholder="id_drama" />
+                <input type="text" id="edit_title" placeholder="title *" />
+                <input type="text" id="edit_title_2" placeholder="title_2" />
+                <textarea id="edit_synopsis" placeholder="synopsis"></textarea>
+                <input type="number" id="edit_release_date" placeholder="release_date (YYYY)" />
+                <input type="text" id="edit_country" placeholder="country" />
+                <input type="number" id="edit_episodes" placeholder="episodes" />
+                <input type="number" id="edit_duration_minutes" placeholder="duration_minutes" />
+                <input type="number" id="edit_seasons" placeholder="seasons" />
+                <input type="text" id="edit_cover" placeholder="cover (url)" />
+
+                <div class="modal-footer">
+                    <button onclick="fecharModalEditar()">Cancelar</button>
+                    <button onclick="guardarEdicao()">Guardar</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- Modal Detalhes / Opções -->
+        <div class="modal" id="modalDetalhes" style="display:none;">
+            <div class="modal-content">
+                <span class="modal-close" onclick="fecharDetalhes()">&times;</span>
+                <h3>Detalhes</h3>
+                <div id="detalhesBody"></div>
+                <div class="modal-footer">
+                    <button onclick="abrirModalEditarFromDetalhes()">Editar</button>
+                    <button onclick="excluirRegistroConfirm()">Eliminar</button>
+                    <button onclick="fecharDetalhes()">Fechar</button>
+                </div>
+            </div>
+        </div>
+
+    </main>
+
+    <script type="module">
+        import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-app.js';
+        import { getDatabase, ref, onValue, set, update, remove, push } from 'https://www.gstatic.com/firebasejs/10.11.0/firebase-database.js';
+
+        // Mantive a tua configuração Firebase original (o ficheiro HTML que enviaste).
+        const firebaseConfig = {
+            apiKey: "AIzaSyC6R-wZcPwfQN82AocnaHz1iQxf21zN74Y",
+            authDomain: "myselflist.firebaseapp.com",
+            databaseURL: "https://myselflist-default-rtdb.firebaseio.com",
+            projectId: "myselflist",
+            storageBucket: "myselflist.firebasestorage.app",
+            messagingSenderId: "255309669494",
+            appId: "1:255309669494:web:fd514288f5875d0e6aeb57",
+            measurementId: "G-NWBRR1MY9F"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getDatabase(app);
+        const dbPath = 'MyselfList/AsianDramas'; // caminho esperado
+
+        let registros = {}; // local copy (key -> object)
+        let keySelecionada = null;
+
+        // Tenta ler do Firebase; se vazio, tenta carregar MySelfList.json local (fallback)
+        (async () => {
+    try {
+        const resp = await fetch('MyselfList.json');
+        if (!resp.ok) throw new Error('Erro ao carregar JSON');
+        const j = await resp.json();
+        const table = (j.tables || []).find(t => t.Name === 'AsianDramas');
+        registros = {};
+        table.data.forEach((item, idx) => {
+            const key = (item.id_drama || item.id_dorama || idx + 1).toString();
+            registros[key] = item;
+        });
+        atualizarTabela();
+    } catch (e) {
+        console.error('Falha ao carregar dados:', e);
+    }
+})();
+
+
+        function atualizarTabela() {
+            const tbody = document.getElementById('tbody');
+            tbody.innerHTML = '';
+            Object.keys(registros).forEach(key => {
+                const r = registros[key] || {};
+                const tr = document.createElement('tr');
+                tr.innerHTML = `
+                    <td>${key}</td>
+                    <td>${r.id_drama ?? ''}</td>
+                    <td>${escapeHtml(r.title ?? '')}</td>
+                    <td>${escapeHtml(r.title_2 ?? '')}</td>
+                    <td>${truncate(escapeHtml(r.synopsis ?? ''), 120)}</td>
+                    <td>${r.release_date ?? ''}</td>
+                    <td>${escapeHtml(r.country ?? '')}</td>
+                    <td>${r.episodes ?? ''}</td>
+                    <td>${r.duration_minutes ?? ''}</td>
+                    <td>${r.seasons ?? ''}</td>
+                    <td>${r.cover ? `<a href="${r.cover}" target="_blank">Capa</a>` : ''}</td>
+                `;
+                tr.ondblclick = () => { keySelecionada = key; abrirDetalhes(key); };
+                tbody.appendChild(tr);
+            });
+        }
+
+        function truncate(str, n) { return (str && str.length>n) ? str.slice(0,n)+'…' : (str||''); }
+        function escapeHtml(s){ return String(s).replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;'); }
+
+        // --- Modais ---
+        window.abrirModalAdicionar = () => {
+            keySelecionada = null;
+            document.getElementById('modalAdicionar').style.display = 'flex';
+            ['add_id_drama','add_title','add_title_2','add_synopsis','add_release_date','add_country','add_episodes','add_duration_minutes','add_seasons','add_cover'].forEach(id=>document.getElementById(id).value='');
+            document.getElementById('errorMsgAdicionar').innerText = '';
+        };
+        window.fecharModalAdicionar = () => document.getElementById('modalAdicionar').style.display = 'none';
+
+        window.guardarNovo = async () => {
+            const novo = {
+                id_drama: document.getElementById('add_id_drama').value.trim() || null,
+                title: document.getElementById('add_title').value.trim(),
+                title_2: document.getElementById('add_title_2').value.trim(),
+                synopsis: document.getElementById('add_synopsis').value.trim(),
+                release_date: document.getElementById('add_release_date').value || null,
+                country: document.getElementById('add_country').value.trim(),
+                episodes: Number(document.getElementById('add_episodes').value) || 0,
+                duration_minutes: Number(document.getElementById('add_duration_minutes').value) || 0,
+                seasons: Number(document.getElementById('add_seasons').value) || 0,
+                cover: document.getElementById('add_cover').value.trim() || null
+            };
+
+            if (!novo.title) {
+                document.getElementById('errorMsgAdicionar').innerText = 'Campo "title" é obrigatório.';
+                return;
+            }
+
+            try {
+                // usa push para gerar chave no Firebase
+                const novoRef = await push(ref(db, dbPath), novo);
+                // atualização local ficará a cargo do onValue quando o Firebase retornar
+                fecharModalAdicionar();
+            } catch (e) {
+                document.getElementById('errorMsgAdicionar').innerText = 'Erro ao gravar no Firebase: ' + (e.message || e);
+            }
+        };
+
+        // --- Detalhes e Edit ---
+        function abrirDetalhes(key){
+            const r = registros[key];
+            const body = document.getElementById('detalhesBody');
+            keySelecionada = key;
+            if (!r) return alert('Registo não encontrado.');
+            body.innerHTML = `
+                <p><strong>Chave:</strong> ${key}</p>
+                <p><strong>id_drama:</strong> ${r.id_drama ?? ''}</p>
+                <p><strong>title:</strong> ${escapeHtml(r.title ?? '')}</p>
+                <p><strong>title_2:</strong> ${escapeHtml(r.title_2 ?? '')}</p>
+                <p><strong>synopsis:</strong><br>${escapeHtml(r.synopsis ?? '')}</p>
+                <p><strong>release_date:</strong> ${r.release_date ?? ''}</p>
+                <p><strong>country:</strong> ${escapeHtml(r.country ?? '')}</p>
+                <p><strong>episodes:</strong> ${r.episodes ?? ''}</p>
+                <p><strong>duration_minutes:</strong> ${r.duration_minutes ?? ''}</p>
+                <p><strong>seasons:</strong> ${r.seasons ?? ''}</p>
+                <p><strong>cover:</strong> ${r.cover ? `<a href="${r.cover}" target="_blank">Ver capa</a>` : ''}</p>
+            `;
+            document.getElementById('modalDetalhes').style.display = 'flex';
+        }
+        window.fecharDetalhes = () => document.getElementById('modalDetalhes').style.display = 'none';
+
+        window.abrirModalEditarFromDetalhes = () => {
+            if (!keySelecionada) return alert('Nenhum registo selecionado');
+            const r = registros[keySelecionada];
+            document.getElementById('edit_key').value = keySelecionada;
+            document.getElementById('edit_id_drama').value = r.id_drama ?? '';
+            document.getElementById('edit_title').value = r.title ?? '';
+            document.getElementById('edit_title_2').value = r.title_2 ?? '';
+            document.getElementById('edit_synopsis').value = r.synopsis ?? '';
+            document.getElementById('edit_release_date').value = r.release_date ?? '';
+            document.getElementById('edit_country').value = r.country ?? '';
+            document.getElementById('edit_episodes').value = r.episodes ?? '';
+            document.getElementById('edit_duration_minutes').value = r.duration_minutes ?? '';
+            document.getElementById('edit_seasons').value = r.seasons ?? '';
+            document.getElementById('edit_cover').value = r.cover ?? '';
+
+            fecharDetalhes();
+            document.getElementById('modalEditar').style.display = 'flex';
+        };
+
+        window.fecharModalEditar = () => document.getElementById('modalEditar').style.display = 'none';
+
+        window.guardarEdicao = async () => {
+            const key = document.getElementById('edit_key').value;
+            if (!key) return alert('Chave inválida');
+            const atualizado = {
+                id_drama: document.getElementById('edit_id_drama').value.trim() || null,
+                title: document.getElementById('edit_title').value.trim(),
+                title_2: document.getElementById('edit_title_2').value.trim(),
+                synopsis: document.getElementById('edit_synopsis').value.trim(),
+                release_date: document.getElementById('edit_release_date').value || null,
+                country: document.getElementById('edit_country').value.trim(),
+                episodes: Number(document.getElementById('edit_episodes').value) || 0,
+                duration_minutes: Number(document.getElementById('edit_duration_minutes').value) || 0,
+                seasons: Number(document.getElementById('edit_seasons').value) || 0,
+                cover: document.getElementById('edit_cover').value.trim() || null
+            };
+
+            if (!atualizado.title) {
+                document.getElementById('errorMsgEditar').innerText = 'Campo "title" é obrigatório.';
+                return;
+            }
+
+            try {
+                await update(ref(db, `${dbPath}/${key}`), atualizado);
+                fecharModalEditar();
+            } catch (e) {
+                document.getElementById('errorMsgEditar').innerText = 'Erro ao atualizar: ' + (e.message || e);
+            }
+        };
+
+        // --- Excluir ---
+        function excluirRegistroConfirm(){
+            if (!keySelecionada) return alert('Nenhum registo selecionado');
+            if (!confirm('Deseja realmente eliminar este registo?')) return;
+            excluirRegistro();
+        }
+        async function excluirRegistro(){
+            try {
+                await remove(ref(db, `${dbPath}/${keySelecionada}`));
+                fecharDetalhes();
+            } catch (e) {
+                alert('Erro ao eliminar: ' + (e.message||e));
+            }
+        }
+
+        // --- Export ---
+        window.gerarPDF = () => {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const colunas = ["Key","id_drama","title","title_2","synopsis","release_date","country","episodes","duration_minutes","seasons","cover"];
+            const dados = Object.entries(registros).map(([k,r]) => [k, r.id_drama||'', r.title||'', r.title_2||'', (r.synopsis||'').replace(/\n/g,' '), r.release_date||'', r.country||'', r.episodes||'', r.duration_minutes||'', r.seasons||'', r.cover||'']);
+            doc.autoTable({ head: [colunas], body: dados, startY: 10, styles: { fontSize: 8 } });
+            doc.save('AsianDramas.pdf');
+        };
+
+        window.gerarExcel = () => {
+            const rows = [["Key","id_drama","title","title_2","synopsis","release_date","country","episodes","duration_minutes","seasons","cover"]];
+            Object.entries(registros).forEach(([k,r]) => rows.push([k, r.id_drama||'', r.title||'', r.title_2||'', r.synopsis||'', r.release_date||'', r.country||'', r.episodes||'', r.duration_minutes||'', r.seasons||'', r.cover||'']));
+            const wb = XLSX.utils.book_new();
+            const ws = XLSX.utils.aoa_to_sheet(rows);
+            XLSX.utils.book_append_sheet(wb, ws, 'AsianDramas');
+            XLSX.writeFile(wb, 'AsianDramas.xlsx');
+        };
+
+        // util: clique fora dos modais fecha-los
+        window.addEventListener('click', (e)=>{
+            ['modalAdicionar','modalEditar','modalDetalhes'].forEach(id=>{
+                const el = document.getElementById(id);
+                if (!el) return;
+                if (e.target === el) el.style.display = 'none';
+            });
+        });
+
+    </script>
+
+    <footer>
+        <p>&copy; 2025 — MyselfList corrigido</p>
+    </footer>
+</body>
+</html>
